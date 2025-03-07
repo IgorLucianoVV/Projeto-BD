@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Índice Hash Estático</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1, h2, h3 {
+            color: #333;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .config-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .input-group label {
+            min-width: 200px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        input[type="number"], 
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 10px 15px;
+            background-color: #781d80;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            flex: 1;
+        }
+        
+        button:hover {
+            background-color: #941679;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .result-section {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .result {
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #ffffff;
+            min-height: 50px;
+            margin-top: 10px;
+        }
+        
+        .page-info {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #ecddf0;
+            border-radius: 5px;
+            border: 1px solid #941679;
+        }
+        
+        .tabla-resultado {
+            margin-top: 15px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .tabla-resultado th, 
+        .tabla-resultado td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        
+        .tabla-resultado th {
+            background-color: #f2f2f2;
+        }
+        
+        .estatisticas {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .stats-item {
+            background-color: #d077bd;
+            padding: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        #arquivo-input {
+            display: none;
+        }
+        
+        #paginacao {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .log-section {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Índice Hash Estático</h1>
+        
+        <!-- Configuração inicial -->
+        <div class="config-section">
+            <h2>Configuração</h2>
+            
+            <div class="input-group">
+                <label for="tamanho-pagina">Tamanho da Página:</label>
+                <input type="number" id="tamanho-pagina" min="10" value="100">
+            </div>
+            
+            <div class="input-group">
+                <label for="max-paginas">Quantidade Máxima de Páginas:</label>
+                <input type="number" id="max-paginas" min="1" value="100">
+            </div>
+            
+            <div class="input-group">
+                <label for="tamanho-bucket">Tamanho do Bucket (FR):</label>
+                <input type="number" id="tamanho-bucket" min="1" value="5">
+            </div>
+            
+            <div class="file-upload input-group">
+                <label for="arquivo-input">Arquivo de Palavras:</label>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                    <input type="file" id="arquivo-input" accept=".txt">
+                    <button id="carregar-arquivo">Carregar Arquivo</button>
+                </div>
+            </div>
+            
+            <button id="configurar-btn">Construir Índice</button>
+        </div>
+        
+        <!-- Busca -->
+        <div class="config-section">
+            <h2>Busca</h2>
+            
+            <div class="input-group">
+                <label for="chave-input">Chave de Busca:</label>
+                <input type="text" id="chave-input" placeholder="Digite uma palavra para buscar">
+            </div>
+            
+            <div class="button-group">
+                <button id="buscar-btn" disabled>Buscar por Hash</button>
+                <button id="table-scan-btn" disabled>Table Scan</button>
+            </div>
+        </div>
+        
+        <!-- Resultados -->
+        <div class="result-section">
+            <h2>Resultado da Busca</h2>
+            <div class="result" id="resultado">
+                Configure o índice para iniciar as buscas.
+            </div>
+            
+            <div id="registro-encontrado" class="hidden">
+                <h3>Registro Encontrado</h3>
+                <table class="tabla-resultado">
+                    <thead>
+                        <tr>
+                            <th>Chave</th>
+                            <th>Página</th>
+                            <th>Posição na Página</th>
+                            <th>Via Hash</th>
+                        </tr>
+                    </thead>
+                    <tbody id="registro-detalhes">
+                        <!-- Detalhes do registro encontrado -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="pagina-conteudo" class="hidden">
+                <h3>Conteúdo da Página</h3>
+                <div class="page-info">
+                    <div id="pagina-info"></div>
+                    <div id="paginacao">
+                        <button id="pagina-anterior" disabled>&lt; Anterior</button>
+                        <span id="pagina-atual"></span>
+                        <button id="proxima-pagina" disabled>Próxima &gt;</button>
+                    </div>
+                </div>
+                <div id="pagina-dados"></div>
+            </div>
+        </div>
+        
+        <!-- Estatísticas -->
+        <div class="config-section">
+            <h2>Estatísticas</h2>
+            <div class="estatisticas">
+                <div class="stats-item">
+                    <span>Número de Registros (NR):</span>
+                    <span id="num-registros">0</span>
+                </div>
+                <div class="stats-item">
+                    <span>Fator de Registro (FR):</span>
+                    <span id="fr-valor">0</span>
+                </div>
+                <div class="stats-item">
+                    <span>Número de Buckets (NB):</span>
+                    <span id="num-buckets">0</span>
+                </div>
+                <div class="stats-item">
+                    <span>Buckets com Overflow:</span>
+                    <span id="overflow-buckets">0</span>
+                </div>
+                <div class="stats-item">
+                    <span>Total de Colisões:</span>
+                    <span id="total-colisoes">0</span>
+                </div>
+                <div class="stats-item">
+                    <span>Páginas Utilizadas:</span>
+                    <span id="paginas-utilizadas">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log de operações -->
+        <div class="log-section">
+            <h3>Log de Operações</h3>
+            <div id="log-container">
+                <!-- Log entries will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class Pagina {
+            constructor(numero, registros) {
+                this.numero = numero;
+                this.registros = registros;
+            }
+        }
+
+        class Bucket {
+            constructor(tamanho) {
+                this.registros = [];
+                this.tamanho = tamanho;
+                this.OVERFLOW = null;
+            }
+            
+            inserir(chave, pagina, posicao) {
+                if (this.registros.length < this.tamanho) {
+                    this.registros.push([chave, pagina, posicao]);
+                    return true;
+                } else if (this.OVERFLOW === null) {
+                    // Criar um novo bucket de overflow quando o bucket atual está cheio
+                    this.OVERFLOW = new Bucket(this.tamanho);
+                    return this.OVERFLOW.inserir(chave, pagina, posicao);
+                } else {
+                    // Tentar inserir no bucket de overflow existente
+                    return this.OVERFLOW.inserir(chave, pagina, posicao);
+                }
+            }
+            
+            buscar(chave) {
+                // Buscar no bucket atual
+                for (const [k, p, pos] of this.registros) {
+                    if (k === chave) {
+                        return { pagina: p, posicao: pos };
+                    }
+                }
+                
+                // Se não encontrou e existe overflow, buscar lá
+                if (this.OVERFLOW !== null) {
+                    return this.OVERFLOW.buscar(chave);
+                }
+                
+                return null;
+            }
+        }
+
+        class HashIndex {
+            constructor(num_buckets, fr) {
+                this.num_buckets = num_buckets;
+                this.buckets = Array(num_buckets).fill().map(() => new Bucket(fr));
+                this.colisoes = 0;
+                this.overflows = 0;
+                this.fr = fr;
+            }
+            
+            // Função hash usando uma implementação simples
+            funcao_hash(chave) {
+                let hash = 0;
+                for (let i = 0; i < chave.length; i++) {
+                    hash = ((hash << 5) - hash) + chave.charCodeAt(i);
+                    hash = hash & hash; // Converte para 32 bits inteiro
+                }
+                return Math.abs(hash % this.num_buckets);
+            }
+            
+            inserir(chave, pagina, posicao) {
+                const idx = this.funcao_hash(chave);
+                
+                // Se o bucket principal estiver cheio
+                if (this.buckets[idx].registros.length >= this.buckets[idx].tamanho) {
+                    this.colisoes++;
+                    
+                    // Se não tiver overflow ainda, incrementa o contador de overflows
+                    if (this.buckets[idx].OVERFLOW === null) {
+                        this.overflows++;
+                    }
+                }
+                
+                // Tenta inserir (vai criar bucket de overflow se necessário)
+                this.buckets[idx].inserir(chave, pagina, posicao);
+            }
+            
+            buscar(chave) {
+                const idx = this.funcao_hash(chave);
+                return {
+                    resultado: this.buckets[idx].buscar(chave),
+                    bucketIndex: idx
+                };
+            }
+            
+            contarBucketsComOverflow() {
+                let count = 0;
+                
+                for (const bucket of this.buckets) {
+                    if (bucket.OVERFLOW !== null) {
+                        count++;
+                    }
+                }
+                
+                return count;
+            }
+        }
+
+        class Aplicacao {
+            constructor() {
+                // Elementos do DOM para configuração
+                this.tamanhoPaginaInput = document.getElementById('tamanho-pagina');
+                this.maxPaginasInput = document.getElementById('max-paginas');
+                this.tamanhoBucketInput = document.getElementById('tamanho-bucket');
+                this.configurarBtn = document.getElementById('configurar-btn');
+                this.carregarArquivoBtn = document.getElementById('carregar-arquivo');
+                this.arquivoInput = document.getElementById('arquivo-input');
+                
+                // Elementos do DOM para busca
+                this.chaveInput = document.getElementById('chave-input');
+                this.buscarBtn = document.getElementById('buscar-btn');
+                this.tableScanBtn = document.getElementById('table-scan-btn');
+                
+                // Elementos do DOM para resultados
+                this.resultado = document.getElementById('resultado');
+                this.registroEncontrado = document.getElementById('registro-encontrado');
+                this.registroDetalhes = document.getElementById('registro-detalhes');
+                this.paginaConteudo = document.getElementById('pagina-conteudo');
+                this.paginaInfo = document.getElementById('pagina-info');
+                this.paginaDados = document.getElementById('pagina-dados');
+                this.paginaAtual = document.getElementById('pagina-atual');
+                this.paginaAnteriorBtn = document.getElementById('pagina-anterior');
+                this.proximaPaginaBtn = document.getElementById('proxima-pagina');
+                
+                // Elementos do DOM para estatísticas
+                this.numRegistros = document.getElementById('num-registros');
+                this.frValor = document.getElementById('fr-valor');
+                this.numBuckets = document.getElementById('num-buckets');
+                this.overflowBuckets = document.getElementById('overflow-buckets');
+                this.totalColisoes = document.getElementById('total-colisoes');
+                this.paginasUtilizadas = document.getElementById('paginas-utilizadas');
+                
+                // Log container
+                this.logContainer = document.getElementById('log-container');
+                
+                // Dados
+                this.palavras = [];
+                this.paginas = [];
+                this.index = null;
+                this.paginaAtualIdx = 0;
+                
+                // Inicializar a interface
+                this.inicializar();
+            }
+            
+            inicializar() {
+                // Eventos para configuração
+                this.configurarBtn.addEventListener('click', () => this.construirIndice());
+                this.carregarArquivoBtn.addEventListener('click', () => this.arquivoInput.click());
+                this.arquivoInput.addEventListener('change', (e) => this.carregarArquivo(e));
+                
+                // Eventos para busca
+                this.buscarBtn.addEventListener('click', () => this.buscar());
+                this.tableScanBtn.addEventListener('click', () => this.tableScan());
+                
+                // Eventos para paginação
+                this.paginaAnteriorBtn.addEventListener('click', () => this.mostrarPaginaAnterior());
+                this.proximaPaginaBtn.addEventListener('click', () => this.mostrarProximaPagina());
+                
+                // Adicionar log inicial
+                this.adicionarLog('Sistema inicializado. Configure o índice para começar.');
+                
+                // Carregar dados de exemplo para teste
+                this.carregarDadosExemplo();
+            }
+            
+            adicionarLog(mensagem) {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                const hora = new Date().toLocaleTimeString();
+                logEntry.textContent = `[${hora}] ${mensagem}`;
+                this.logContainer.prepend(logEntry);
+            }
+            
+            carregarDadosExemplo() {
+                // Criar algumas palavras de exemplo
+                this.palavras = [
+                    'igor', 'javascript', 'html', 'css', 'python', 'java', 'php', 'ruby', 'swift', 
+                    'kotlin', 'typescript', 'react', 'angular', 'vue', 'node', 'express', 
+                    'mongodb', 'mysql', 'postgresql', 'redis', 'firebase', 'aws', 'azure', 
+                    'google', 'cloud', 'docker', 'kubernetes', 'git', 'github', 'gitlab', 
+                    'bitbucket', 'jira', 'trello', 'slack', 'discord', 'zoom', 'meet', 
+                    'teams', 'skype', 'whatsapp', 'telegram', 'signal', 'facebook', 'twitter', 
+                    'instagram', 'linkedin', 'youtube', 'twitch', 'tiktok', 'snapchat'
+                ];
+                
+                this.adicionarLog(`Dados de exemplo carregados: ${this.palavras.length} palavras`);
+            }
+            
+            carregarArquivo(e) {
+                const arquivo = e.target.files[0];
+                if (!arquivo) return;
+                
+                this.adicionarLog(`Carregando arquivo: ${arquivo.name}`);
+                
+                const leitor = new FileReader();
+                leitor.onload = (evento) => {
+                    const conteudo = evento.target.result;
+                    this.palavras = conteudo.split(/\r?\n/).filter(palavra => palavra.trim() !== '');
+                    
+                    this.adicionarLog(`Arquivo carregado com sucesso: ${this.palavras.length} palavras`);
+                };
+                leitor.readAsText(arquivo);
+            }
+            
+            construirIndice() {
+                // Obter parâmetros de configuração
+                const tamanhoPagina = parseInt(this.tamanhoPaginaInput.value) || 100;
+                const maxPaginas = parseInt(this.maxPaginasInput.value) || 100;
+                const tamanhoBucket = parseInt(this.tamanhoBucketInput.value) || 5;
+                
+                // Validar configuração
+                if (tamanhoPagina <= 0 || maxPaginas <= 0 || tamanhoBucket <= 0) {
+                    alert('Todos os valores de configuração devem ser positivos.');
+                    return;
+                }
+                
+                // Validar que temos palavras para indexar
+                if (this.palavras.length === 0) {
+                    alert('Não há palavras para indexar. Carregue um arquivo ou use os dados de exemplo.');
+                    return;
+                }
+                
+                this.adicionarLog(`Construindo índice: Tamanho da Página=${tamanhoPagina}, Máx. Páginas=${maxPaginas}, Tamanho Bucket=${tamanhoBucket}`);
+                
+                // Calcular número de buckets (NB > NR / FR)
+                const NR = this.palavras.length;
+                const FR = tamanhoBucket;
+                let NB = Math.ceil(NR / FR) + 1;
+                
+                // Limitar o número de páginas se exceder o máximo
+                const numPaginasCalculado = Math.ceil(this.palavras.length / tamanhoPagina);
+                const numPaginas = Math.min(numPaginasCalculado, maxPaginas);
+                
+                this.adicionarLog(`Parâmetros calculados: NR=${NR}, FR=${FR}, NB=${NB}, Páginas=${numPaginas}`);
+                
+                // Criar o índice
+                this.index = new HashIndex(NB, FR);
+                this.paginas = [];
+                
+                // Criar páginas e indexar palavras
+                for (let i = 0; i < this.palavras.length && this.paginas.length < maxPaginas; i += tamanhoPagina) {
+                    const paginaNum = Math.floor(i / tamanhoPagina);
+                    const registros = this.palavras.slice(i, i + tamanhoPagina);
+                    const pagina = new Pagina(paginaNum, registros);
+                    this.paginas.push(pagina);
+                    
+                    // Indexar cada palavra na página
+                    for (let j = 0; j < registros.length; j++) {
+                        const palavra = registros[j];
+                        this.index.inserir(palavra, paginaNum, j);
+                    }
+                }
+                
+                // Atualizar estatísticas
+                this.atualizarEstatisticas();
+                
+                // Habilitar busca
+                this.buscarBtn.disabled = false;
+                this.tableScanBtn.disabled = false;
+                
+                // Atualizar resultado
+                this.resultado.textContent = `Índice construído com sucesso! ${this.palavras.length} palavras indexadas em ${this.paginas.length} páginas.`;
+                
+                this.adicionarLog(`Índice construído: ${this.palavras.length} palavras indexadas em ${this.paginas.length} páginas`);
+            }
+            
+            buscar() {
+                const chave = this.chaveInput.value;
+                if (!chave) {
+                    alert('Digite uma chave para buscar!');
+                    return;
+                }
+                
+                this.adicionarLog(`Buscando por hash: "${chave}"`);
+                
+                const inicio = performance.now();
+                const { resultado, bucketIndex } = this.index.buscar(chave);
+                const tempoBusca = performance.now() - inicio;
+                
+                this.registroDetalhes.innerHTML = '';
+                
+                if (resultado !== null) {
+                    const { pagina, posicao } = resultado;
+                    
+                    this.resultado.innerHTML = `<strong>Encontrado via hash</strong> em ${tempoBusca.toFixed(3)}ms (Bucket: ${bucketIndex})`;
+                    
+                    // Mostrar registro encontrado
+                    this.registroEncontrado.classList.remove('hidden');
+                    
+                    // Adicionar detalhes do registro
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${chave}</td>
+                        <td>${pagina}</td>
+                        <td>${posicao}</td>
+                        <td>Sim</td>
+                    `;
+                    this.registroDetalhes.appendChild(tr);
+                    
+                    // Mostrar página
+                    this.mostrarPagina(pagina);
+                    
+                    this.adicionarLog(`Registro encontrado: Página ${pagina}, Posição ${posicao}, Tempo: ${tempoBusca.toFixed(3)}ms`);
+                } else {
+                    this.resultado.innerHTML = `<strong>Chave não encontrada</strong> (Tempo de busca: ${tempoBusca.toFixed(3)}ms)`;
+                    this.registroEncontrado.classList.add('hidden');
+                    this.paginaConteudo.classList.add('hidden');
+                    
+                    this.adicionarLog(`Chave não encontrada: "${chave}"`);
+                }
+            }
+            
+            tableScan() {
+                const chave = this.chaveInput.value;
+                if (!chave) {
+                    alert('Digite uma chave para buscar!');
+                    return;
+                }
+                
+                this.adicionarLog(`Realizando table scan: "${chave}"`);
+                
+                const inicio = performance.now();
+                let encontrado = false;
+                let paginaEncontrada, posicaoEncontrada;
+                
+                // Percorrer todas as páginas
+                for (const pagina of this.paginas) {
+                    const posicao = pagina.registros.indexOf(chave);
+                    if (posicao !== -1) {
+                        encontrado = true;
+                        paginaEncontrada = pagina.numero;
+                        posicaoEncontrada = posicao;
+                        break;
+                    }
+                }
+                
+                const tempoScan = performance.now() - inicio;
+                
+                this.registroDetalhes.innerHTML = '';
+                
+                if (encontrado) {
+                    this.resultado.innerHTML = `<strong>Encontrado via table scan</strong> em ${tempoScan.toFixed(3)}ms`;
+                    
+                    // Mostrar registro encontrado
+                    this.registroEncontrado.classList.remove('hidden');
+                    
+                    // Adicionar detalhes do registro
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${chave}</td>
+                        <td>${paginaEncontrada}</td>
+                        <td>${posicaoEncontrada}</td>
+                        <td>Não</td>
+                    `;
+                    this.registroDetalhes.appendChild(tr);
+                    
+                    // Mostrar página
+                    this.mostrarPagina(paginaEncontrada);
+                    
+                    this.adicionarLog(`Registro encontrado por table scan: Página ${paginaEncontrada}, Posição ${posicaoEncontrada}, Tempo: ${tempoScan.toFixed(3)}ms`);
+                } else {
+                    this.resultado.innerHTML = `<strong>Chave não encontrada (Table Scan)</strong> (Tempo: ${tempoScan.toFixed(3)}ms)`;
+                    this.registroEncontrado.classList.add('hidden');
+                    this.paginaConteudo.classList.add('hidden');
+                    
+                    this.adicionarLog(`Table scan: Chave não encontrada: "${chave}"`);
+                }
+            }
+            
+            mostrarPagina(numPagina) {
+                if (numPagina < 0 || numPagina >= this.paginas.length) {
+                    return;
+                }
+                
+                this.paginaAtualIdx = numPagina;
+                const pagina = this.paginas[numPagina];
+                
+                // Mostrar conteúdo da página
+                this.paginaConteudo.classList.remove('hidden');
+                this.paginaInfo.textContent = `Página ${numPagina} (${pagina.registros.length} registros)`;
+                this.paginaAtual.textContent = `Página ${numPagina + 1} de ${this.paginas.length}`;
+                
+                // Verificar navegação
+                this.paginaAnteriorBtn.disabled = numPagina <= 0;
+                this.proximaPaginaBtn.disabled = numPagina >= this.paginas.length - 1;
+                
+                // Mostrar dados da página
+                this.paginaDados.innerHTML = '';
+                const table = document.createElement('table');
+                table.className = 'tabla-resultado';
+                
+                // Cabeçalho da tabela
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                headerRow.innerHTML = `
+                    <th>Posição</th>
+                    <th>Registro</th>
+                `;
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                
+                // Corpo da tabela
+                const tbody = document.createElement('tbody');
+                pagina.registros.forEach((registro, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${idx}</td>
+                        <td>${registro}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+                table.appendChild(tbody);
+                this.paginaDados.appendChild(table);
+            }
+            
+            mostrarPaginaAnterior() {
+                if (this.paginaAtualIdx > 0) {
+                    this.mostrarPagina(this.paginaAtualIdx - 1);
+                }
+            }
+            
+            mostrarProximaPagina() {
+                if (this.paginaAtualIdx < this.paginas.length - 1) {
+                    this.mostrarPagina(this.paginaAtualIdx + 1);
+                }
+            }
+            
+            atualizarEstatisticas() {
+                if (!this.index) return;
+                
+                const NR = this.palavras.length;
+                const FR = this.index.fr;
+                const NB = this.index.num_buckets;
+                
+                this.numRegistros.textContent = NR;
+                this.frValor.textContent = FR;
+                this.numBuckets.textContent = NB;
+                this.overflowBuckets.textContent = this.index.contarBucketsComOverflow();
+                this.totalColisoes.textContent = this.index.colisoes;
+                this.paginasUtilizadas.textContent = this.paginas.length;
+            }
+        }
+
+        // Inicializar a aplicação quando o DOM estiver carregado
+        document.addEventListener('DOMContentLoaded', () => {
+            const app = new Aplicacao();
+        });
+    </script>
+</body>
+</html>
