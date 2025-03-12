@@ -240,6 +240,7 @@
                             <th>Página</th>
                             <th>Posição na Página</th>
                             <th>Via Hash</th>
+                            <th>Custo</th>
                         </tr>
                     </thead>
                     <tbody id="registro-detalhes">
@@ -290,6 +291,14 @@
                     <span>Páginas Utilizadas:</span>
                     <span id="paginas-utilizadas">0</span>
                 </div>
+                <div class="stats-item">
+                    <span>Taxa de Colisões:</span>
+                    <span id="taxa-colisoes">0%</span>
+                </div>
+                <div class="stats-item">
+                    <span>Taxa de Overflows:</span>
+                    <span id="taxa-overflows">0%</span>
+                </div>
             </div>
         </div>
         
@@ -303,459 +312,520 @@
     </div>
 
     <script>
-        class Pagina {
-            constructor(numero, registros) {
-                this.numero = numero;
-                this.registros = registros;
+// This script should replace the existing script section in your HTML file
+
+class Pagina {
+    constructor(numero, registros) {
+        this.numero = numero;
+        this.registros = registros;
+    }
+}
+
+class Bucket {
+    constructor(tamanho) {
+        this.registros = [];
+        this.tamanho = tamanho;
+        this.OVERFLOW = null;
+    }
+    
+    inserir(chave, pagina, posicao) {
+        if (this.registros.length < this.tamanho) {
+            this.registros.push([chave, pagina, posicao]);
+            return true;
+        } else if (this.OVERFLOW === null) {
+            // Criar um novo bucket de overflow quando o bucket atual está cheio
+            this.OVERFLOW = new Bucket(this.tamanho);
+            return this.OVERFLOW.inserir(chave, pagina, posicao);
+        } else {
+            // Tentar inserir no bucket de overflow existente
+            return this.OVERFLOW.inserir(chave, pagina, posicao);
+        }
+    }
+    
+    buscar(chave) {
+        // Buscar no bucket atual
+        for (const [k, p, pos] of this.registros) {
+            if (k === chave) {
+                return { pagina: p, posicao: pos };
             }
         }
+        
+        // Se não encontrou e existe overflow, buscar lá
+        if (this.OVERFLOW !== null) {
+            return this.OVERFLOW.buscar(chave);
+        }
+        
+        return null;
+    }
+}
 
-        class Bucket {
-            constructor(tamanho) {
-                this.registros = [];
-                this.tamanho = tamanho;
-                this.OVERFLOW = null;
-            }
+class HashIndex {
+    constructor(num_buckets, fr) {
+        this.num_buckets = num_buckets;
+        this.buckets = Array(num_buckets).fill().map(() => new Bucket(fr));
+        this.colisoes = 0;
+        this.overflows = 0;
+        this.fr = fr;
+    }
+    
+    // Função hash usando uma implementação simples
+    funcao_hash(chave) {
+        let hash = 0;
+        for (let i = 0; i < chave.length; i++) {
+            hash = ((hash << 5) - hash) + chave.charCodeAt(i);
+            hash = hash & hash; // Converte para 32 bits inteiro
+        }
+        return Math.abs(hash % this.num_buckets);
+    }
+    
+    inserir(chave, pagina, posicao) {
+        const idx = this.funcao_hash(chave);
+        
+        // Se o bucket principal estiver cheio
+        if (this.buckets[idx].registros.length >= this.buckets[idx].tamanho) {
+            this.colisoes++;
             
-            inserir(chave, pagina, posicao) {
-                if (this.registros.length < this.tamanho) {
-                    this.registros.push([chave, pagina, posicao]);
-                    return true;
-                } else if (this.OVERFLOW === null) {
-                    // Criar um novo bucket de overflow quando o bucket atual está cheio
-                    this.OVERFLOW = new Bucket(this.tamanho);
-                    return this.OVERFLOW.inserir(chave, pagina, posicao);
-                } else {
-                    // Tentar inserir no bucket de overflow existente
-                    return this.OVERFLOW.inserir(chave, pagina, posicao);
-                }
-            }
-            
-            buscar(chave) {
-                // Buscar no bucket atual
-                for (const [k, p, pos] of this.registros) {
-                    if (k === chave) {
-                        return { pagina: p, posicao: pos };
-                    }
-                }
-                
-                // Se não encontrou e existe overflow, buscar lá
-                if (this.OVERFLOW !== null) {
-                    return this.OVERFLOW.buscar(chave);
-                }
-                
-                return null;
+            // Se não tiver overflow ainda, incrementa o contador de overflows
+            if (this.buckets[idx].OVERFLOW === null) {
+                this.overflows++;
             }
         }
-
-        class HashIndex {
-            constructor(num_buckets, fr) {
-                this.num_buckets = num_buckets;
-                this.buckets = Array(num_buckets).fill().map(() => new Bucket(fr));
-                this.colisoes = 0;
-                this.overflows = 0;
-                this.fr = fr;
-            }
-            
-            // Função hash usando uma implementação simples
-            funcao_hash(chave) {
-                let hash = 0;
-                for (let i = 0; i < chave.length; i++) {
-                    hash = ((hash << 5) - hash) + chave.charCodeAt(i);
-                    hash = hash & hash; // Converte para 32 bits inteiro
-                }
-                return Math.abs(hash % this.num_buckets);
-            }
-            
-            inserir(chave, pagina, posicao) {
-                const idx = this.funcao_hash(chave);
-                
-                // Se o bucket principal estiver cheio
-                if (this.buckets[idx].registros.length >= this.buckets[idx].tamanho) {
-                    this.colisoes++;
-                    
-                    // Se não tiver overflow ainda, incrementa o contador de overflows
-                    if (this.buckets[idx].OVERFLOW === null) {
-                        this.overflows++;
-                    }
-                }
-                
-                // Tenta inserir (vai criar bucket de overflow se necessário)
-                this.buckets[idx].inserir(chave, pagina, posicao);
-            }
-            
-            buscar(chave) {
-                const idx = this.funcao_hash(chave);
-                return {
-                    resultado: this.buckets[idx].buscar(chave),
-                    bucketIndex: idx
-                };
-            }
-            
-            contarBucketsComOverflow() {
-                let count = 0;
-                
-                for (const bucket of this.buckets) {
-                    if (bucket.OVERFLOW !== null) {
-                        count++;
-                    }
-                }
-                
-                return count;
+        
+        // Tenta inserir (vai criar bucket de overflow se necessário)
+        this.buckets[idx].inserir(chave, pagina, posicao);
+    }
+    
+    buscar(chave) {
+        const idx = this.funcao_hash(chave);
+        return {
+            resultado: this.buckets[idx].buscar(chave),
+            bucketIndex: idx
+        };
+    }
+    
+    contarBucketsComOverflow() {
+        let count = 0;
+        
+        for (const bucket of this.buckets) {
+            if (bucket.OVERFLOW !== null) {
+                count++;
             }
         }
+        
+        return count;
+    }
+}
 
-        class Aplicacao {
-            constructor() {
-                // Elementos do DOM para configuração
-                this.tamanhoPaginaInput = document.getElementById('tamanho-pagina');
-                this.maxPaginasInput = document.getElementById('max-paginas');
-                this.tamanhoBucketInput = document.getElementById('tamanho-bucket');
-                this.configurarBtn = document.getElementById('configurar-btn');
-                this.carregarArquivoBtn = document.getElementById('carregar-arquivo');
-                this.arquivoInput = document.getElementById('arquivo-input');
-                
-                // Elementos do DOM para busca
-                this.chaveInput = document.getElementById('chave-input');
-                this.buscarBtn = document.getElementById('buscar-btn');
-                this.tableScanBtn = document.getElementById('table-scan-btn');
-                
-                // Elementos do DOM para resultados
-                this.resultado = document.getElementById('resultado');
-                this.registroEncontrado = document.getElementById('registro-encontrado');
-                this.registroDetalhes = document.getElementById('registro-detalhes');
-                this.paginaConteudo = document.getElementById('pagina-conteudo');
-                this.paginaInfo = document.getElementById('pagina-info');
-                this.paginaDados = document.getElementById('pagina-dados');
-                this.paginaAtual = document.getElementById('pagina-atual');
-                this.paginaAnteriorBtn = document.getElementById('pagina-anterior');
-                this.proximaPaginaBtn = document.getElementById('proxima-pagina');
-                
-                // Elementos do DOM para estatísticas
-                this.numRegistros = document.getElementById('num-registros');
-                this.frValor = document.getElementById('fr-valor');
-                this.numBuckets = document.getElementById('num-buckets');
-                this.overflowBuckets = document.getElementById('overflow-buckets');
-                this.totalColisoes = document.getElementById('total-colisoes');
-                this.paginasUtilizadas = document.getElementById('paginas-utilizadas');
-                
-                // Log container
-                this.logContainer = document.getElementById('log-container');
-                
-                // Dados
-                this.palavras = [];
-                this.paginas = [];
-                this.index = null;
-                this.paginaAtualIdx = 0;
-                
-                // Inicializar a interface
-                this.inicializar();
-            }
+class Aplicacao {
+    constructor() {
+        // Elementos do DOM para configuração
+        this.tamanhoPaginaInput = document.getElementById('tamanho-pagina');
+        this.maxPaginasInput = document.getElementById('max-paginas');
+        this.tamanhoBucketInput = document.getElementById('tamanho-bucket');
+        this.configurarBtn = document.getElementById('configurar-btn');
+        this.carregarArquivoBtn = document.getElementById('carregar-arquivo');
+        this.arquivoInput = document.getElementById('arquivo-input');
+        
+        // Elementos do DOM para busca
+        this.chaveInput = document.getElementById('chave-input');
+        this.buscarBtn = document.getElementById('buscar-btn');
+        this.tableScanBtn = document.getElementById('table-scan-btn');
+        
+        // Elementos do DOM para resultados
+        this.resultado = document.getElementById('resultado');
+        this.registroEncontrado = document.getElementById('registro-encontrado');
+        this.registroDetalhes = document.getElementById('registro-detalhes');
+        this.paginaConteudo = document.getElementById('pagina-conteudo');
+        this.paginaInfo = document.getElementById('pagina-info');
+        this.paginaDados = document.getElementById('pagina-dados');
+        this.paginaAtual = document.getElementById('pagina-atual');
+        this.paginaAnteriorBtn = document.getElementById('pagina-anterior');
+        this.proximaPaginaBtn = document.getElementById('proxima-pagina');
+        
+        // Elementos do DOM para estatísticas
+        this.numRegistros = document.getElementById('num-registros');
+        this.frValor = document.getElementById('fr-valor');
+        this.numBuckets = document.getElementById('num-buckets');
+        this.overflowBuckets = document.getElementById('overflow-buckets');
+        this.totalColisoes = document.getElementById('total-colisoes');
+        this.paginasUtilizadas = document.getElementById('paginas-utilizadas');
+        this.taxaColisoes = document.getElementById('taxa-colisoes');
+        this.taxaOverflows = document.getElementById('taxa-overflows');
+    
+        
+        // Log container
+        this.logContainer = document.getElementById('log-container');
+        
+        // Dados
+        this.palavras = [];
+        this.paginas = [];
+        this.index = null;
+        this.paginaAtualIdx = 0;
+        
+        // Inicializar a interface
+        this.inicializar();
+    }
+    
+    inicializar() {
+        // Eventos para configuração
+        this.configurarBtn.addEventListener('click', () => this.construirIndice());
+        this.carregarArquivoBtn.addEventListener('click', () => this.arquivoInput.click());
+        this.arquivoInput.addEventListener('change', (e) => this.carregarArquivo(e));
+        
+        // Eventos para busca
+        this.buscarBtn.addEventListener('click', () => this.buscar());
+        this.tableScanBtn.addEventListener('click', () => this.tableScan());
+        
+        // Eventos para paginação
+        this.paginaAnteriorBtn.addEventListener('click', () => this.mostrarPaginaAnterior());
+        this.proximaPaginaBtn.addEventListener('click', () => this.mostrarProximaPagina());
+        
+        // Adicionar log inicial
+        this.adicionarLog('Sistema inicializado. Configure o índice para começar.');
+        
+        // Carregar dados de exemplo para teste
+        this.carregarDadosExemplo();
+    }
+    
+    adicionarLog(mensagem) {
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry';
+        const hora = new Date().toLocaleTimeString();
+        logEntry.textContent = `[${hora}] ${mensagem}`;
+        this.logContainer.prepend(logEntry);
+    }
+    
+    carregarDadosExemplo() {
+        // Criar algumas palavras de exemplo
+        this.palavras = [
+            'igor', 'javascript', 'html', 'css', 'python', 'java', 'php', 'ruby', 'swift', 
+            'kotlin', 'typescript', 'react', 'angular', 'vue', 'node', 'express', 
+            'mongodb', 'mysql', 'postgresql', 'redis', 'firebase', 'aws', 'azure', 
+            'google', 'cloud', 'docker', 'kubernetes', 'git', 'github', 'gitlab', 
+            'bitbucket', 'jira', 'trello', 'slack', 'discord', 'zoom', 'meet', 
+            'teams', 'skype', 'whatsapp', 'telegram', 'signal', 'facebook', 'twitter', 
+            'instagram', 'linkedin', 'youtube', 'twitch', 'tiktok', 'snapchat'
+        ];
+        
+        this.adicionarLog(`Dados de exemplo carregados: ${this.palavras.length} palavras`);
+    }
+    
+    carregarArquivo(e) {
+        const arquivo = e.target.files[0];
+        if (!arquivo) return;
+        
+        this.adicionarLog(`Carregando arquivo: ${arquivo.name}`);
+        
+        const leitor = new FileReader();
+        leitor.onload = (evento) => {
+            const conteudo = evento.target.result;
+            this.palavras = conteudo.split(/\r?\n/).filter(palavra => palavra.trim() !== '');
             
-            inicializar() {
-                // Eventos para configuração
-                this.configurarBtn.addEventListener('click', () => this.construirIndice());
-                this.carregarArquivoBtn.addEventListener('click', () => this.arquivoInput.click());
-                this.arquivoInput.addEventListener('change', (e) => this.carregarArquivo(e));
-                
-                // Eventos para busca
-                this.buscarBtn.addEventListener('click', () => this.buscar());
-                this.tableScanBtn.addEventListener('click', () => this.tableScan());
-                
-                // Eventos para paginação
-                this.paginaAnteriorBtn.addEventListener('click', () => this.mostrarPaginaAnterior());
-                this.proximaPaginaBtn.addEventListener('click', () => this.mostrarProximaPagina());
-                
-                // Adicionar log inicial
-                this.adicionarLog('Sistema inicializado. Configure o índice para começar.');
-                
-                // Carregar dados de exemplo para teste
-                this.carregarDadosExemplo();
-            }
+            this.adicionarLog(`Arquivo carregado com sucesso: ${this.palavras.length} palavras`);
+        };
+        leitor.readAsText(arquivo);
+    }
+    
+    construirIndice() {
+        // Obter parâmetros de configuração
+        const tamanhoPagina = parseInt(this.tamanhoPaginaInput.value) || 100;
+        const maxPaginas = parseInt(this.maxPaginasInput.value) || 100;
+        const tamanhoBucket = parseInt(this.tamanhoBucketInput.value) || 5;
+        
+        // Validar configuração
+        if (tamanhoPagina <= 0 || maxPaginas <= 0 || tamanhoBucket <= 0) {
+            alert('Todos os valores de configuração devem ser positivos.');
+            return;
+        }
+        
+        // Validar que temos palavras para indexar
+        if (this.palavras.length === 0) {
+            alert('Não há palavras para indexar. Carregue um arquivo ou use os dados de exemplo.');
+            return;
+        }
+        
+        this.adicionarLog(`Construindo índice: Tamanho da Página=${tamanhoPagina}, Máx. Páginas=${maxPaginas}, Tamanho Bucket=${tamanhoBucket}`);
+        
+        // Calcular número de buckets (NB > NR / FR)
+        const NR = this.palavras.length;
+        const FR = tamanhoBucket;
+        let NB = Math.ceil(NR / FR) + 1;
+        
+        // Limitar o número de páginas se exceder o máximo
+        const numPaginasCalculado = Math.ceil(this.palavras.length / tamanhoPagina);
+        const numPaginas = Math.min(numPaginasCalculado, maxPaginas);
+        
+        this.adicionarLog(`Parâmetros calculados: NR=${NR}, FR=${FR}, NB=${NB}, Páginas=${numPaginas}`);
+        
+        // Criar o índice
+        this.index = new HashIndex(NB, FR);
+        this.paginas = [];
+        
+        // Criar páginas e indexar palavras
+        for (let i = 0; i < this.palavras.length && this.paginas.length < maxPaginas; i += tamanhoPagina) {
+            const paginaNum = Math.floor(i / tamanhoPagina);
+            const registros = this.palavras.slice(i, i + tamanhoPagina);
+            const pagina = new Pagina(paginaNum, registros);
+            this.paginas.push(pagina);
             
-            adicionarLog(mensagem) {
-                const logEntry = document.createElement('div');
-                logEntry.className = 'log-entry';
-                const hora = new Date().toLocaleTimeString();
-                logEntry.textContent = `[${hora}] ${mensagem}`;
-                this.logContainer.prepend(logEntry);
-            }
-            
-            carregarDadosExemplo() {
-                // Criar algumas palavras de exemplo
-                this.palavras = [
-                    'igor', 'javascript', 'html', 'css', 'python', 'java', 'php', 'ruby', 'swift', 
-                    'kotlin', 'typescript', 'react', 'angular', 'vue', 'node', 'express', 
-                    'mongodb', 'mysql', 'postgresql', 'redis', 'firebase', 'aws', 'azure', 
-                    'google', 'cloud', 'docker', 'kubernetes', 'git', 'github', 'gitlab', 
-                    'bitbucket', 'jira', 'trello', 'slack', 'discord', 'zoom', 'meet', 
-                    'teams', 'skype', 'whatsapp', 'telegram', 'signal', 'facebook', 'twitter', 
-                    'instagram', 'linkedin', 'youtube', 'twitch', 'tiktok', 'snapchat'
-                ];
-                
-                this.adicionarLog(`Dados de exemplo carregados: ${this.palavras.length} palavras`);
-            }
-            
-            carregarArquivo(e) {
-                const arquivo = e.target.files[0];
-                if (!arquivo) return;
-                
-                this.adicionarLog(`Carregando arquivo: ${arquivo.name}`);
-                
-                const leitor = new FileReader();
-                leitor.onload = (evento) => {
-                    const conteudo = evento.target.result;
-                    this.palavras = conteudo.split(/\r?\n/).filter(palavra => palavra.trim() !== '');
-                    
-                    this.adicionarLog(`Arquivo carregado com sucesso: ${this.palavras.length} palavras`);
-                };
-                leitor.readAsText(arquivo);
-            }
-            
-            construirIndice() {
-                // Obter parâmetros de configuração
-                const tamanhoPagina = parseInt(this.tamanhoPaginaInput.value) || 100;
-                const maxPaginas = parseInt(this.maxPaginasInput.value) || 100;
-                const tamanhoBucket = parseInt(this.tamanhoBucketInput.value) || 5;
-                
-                // Validar configuração
-                if (tamanhoPagina <= 0 || maxPaginas <= 0 || tamanhoBucket <= 0) {
-                    alert('Todos os valores de configuração devem ser positivos.');
-                    return;
-                }
-                
-                // Validar que temos palavras para indexar
-                if (this.palavras.length === 0) {
-                    alert('Não há palavras para indexar. Carregue um arquivo ou use os dados de exemplo.');
-                    return;
-                }
-                
-                this.adicionarLog(`Construindo índice: Tamanho da Página=${tamanhoPagina}, Máx. Páginas=${maxPaginas}, Tamanho Bucket=${tamanhoBucket}`);
-                
-                // Calcular número de buckets (NB > NR / FR)
-                const NR = this.palavras.length;
-                const FR = tamanhoBucket;
-                let NB = Math.ceil(NR / FR) + 1;
-                
-                // Limitar o número de páginas se exceder o máximo
-                const numPaginasCalculado = Math.ceil(this.palavras.length / tamanhoPagina);
-                const numPaginas = Math.min(numPaginasCalculado, maxPaginas);
-                
-                this.adicionarLog(`Parâmetros calculados: NR=${NR}, FR=${FR}, NB=${NB}, Páginas=${numPaginas}`);
-                
-                // Criar o índice
-                this.index = new HashIndex(NB, FR);
-                this.paginas = [];
-                
-                // Criar páginas e indexar palavras
-                for (let i = 0; i < this.palavras.length && this.paginas.length < maxPaginas; i += tamanhoPagina) {
-                    const paginaNum = Math.floor(i / tamanhoPagina);
-                    const registros = this.palavras.slice(i, i + tamanhoPagina);
-                    const pagina = new Pagina(paginaNum, registros);
-                    this.paginas.push(pagina);
-                    
-                    // Indexar cada palavra na página
-                    for (let j = 0; j < registros.length; j++) {
-                        const palavra = registros[j];
-                        this.index.inserir(palavra, paginaNum, j);
-                    }
-                }
-                
-                // Atualizar estatísticas
-                this.atualizarEstatisticas();
-                
-                // Habilitar busca
-                this.buscarBtn.disabled = false;
-                this.tableScanBtn.disabled = false;
-                
-                // Atualizar resultado
-                this.resultado.textContent = `Índice construído com sucesso! ${this.palavras.length} palavras indexadas em ${this.paginas.length} páginas.`;
-                
-                this.adicionarLog(`Índice construído: ${this.palavras.length} palavras indexadas em ${this.paginas.length} páginas`);
-            }
-            
-            buscar() {
-                const chave = this.chaveInput.value;
-                if (!chave) {
-                    alert('Digite uma chave para buscar!');
-                    return;
-                }
-                
-                this.adicionarLog(`Buscando por hash: "${chave}"`);
-                
-                const inicio = performance.now();
-                const { resultado, bucketIndex } = this.index.buscar(chave);
-                const tempoBusca = performance.now() - inicio;
-                
-                this.registroDetalhes.innerHTML = '';
-                
-                if (resultado !== null) {
-                    const { pagina, posicao } = resultado;
-                    
-                    this.resultado.innerHTML = `<strong>Encontrado via hash</strong> em ${tempoBusca.toFixed(3)}ms (Bucket: ${bucketIndex})`;
-                    
-                    // Mostrar registro encontrado
-                    this.registroEncontrado.classList.remove('hidden');
-                    
-                    // Adicionar detalhes do registro
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${chave}</td>
-                        <td>${pagina}</td>
-                        <td>${posicao}</td>
-                        <td>Sim</td>
-                    `;
-                    this.registroDetalhes.appendChild(tr);
-                    
-                    // Mostrar página
-                    this.mostrarPagina(pagina);
-                    
-                    this.adicionarLog(`Registro encontrado: Página ${pagina}, Posição ${posicao}, Tempo: ${tempoBusca.toFixed(3)}ms`);
-                } else {
-                    this.resultado.innerHTML = `<strong>Chave não encontrada</strong> (Tempo de busca: ${tempoBusca.toFixed(3)}ms)`;
-                    this.registroEncontrado.classList.add('hidden');
-                    this.paginaConteudo.classList.add('hidden');
-                    
-                    this.adicionarLog(`Chave não encontrada: "${chave}"`);
-                }
-            }
-            
-            tableScan() {
-                const chave = this.chaveInput.value;
-                if (!chave) {
-                    alert('Digite uma chave para buscar!');
-                    return;
-                }
-                
-                this.adicionarLog(`Realizando table scan: "${chave}"`);
-                
-                const inicio = performance.now();
-                let encontrado = false;
-                let paginaEncontrada, posicaoEncontrada;
-                
-                // Percorrer todas as páginas
-                for (const pagina of this.paginas) {
-                    const posicao = pagina.registros.indexOf(chave);
-                    if (posicao !== -1) {
-                        encontrado = true;
-                        paginaEncontrada = pagina.numero;
-                        posicaoEncontrada = posicao;
-                        break;
-                    }
-                }
-                
-                const tempoScan = performance.now() - inicio;
-                
-                this.registroDetalhes.innerHTML = '';
-                
-                if (encontrado) {
-                    this.resultado.innerHTML = `<strong>Encontrado via table scan</strong> em ${tempoScan.toFixed(3)}ms`;
-                    
-                    // Mostrar registro encontrado
-                    this.registroEncontrado.classList.remove('hidden');
-                    
-                    // Adicionar detalhes do registro
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${chave}</td>
-                        <td>${paginaEncontrada}</td>
-                        <td>${posicaoEncontrada}</td>
-                        <td>Não</td>
-                    `;
-                    this.registroDetalhes.appendChild(tr);
-                    
-                    // Mostrar página
-                    this.mostrarPagina(paginaEncontrada);
-                    
-                    this.adicionarLog(`Registro encontrado por table scan: Página ${paginaEncontrada}, Posição ${posicaoEncontrada}, Tempo: ${tempoScan.toFixed(3)}ms`);
-                } else {
-                    this.resultado.innerHTML = `<strong>Chave não encontrada (Table Scan)</strong> (Tempo: ${tempoScan.toFixed(3)}ms)`;
-                    this.registroEncontrado.classList.add('hidden');
-                    this.paginaConteudo.classList.add('hidden');
-                    
-                    this.adicionarLog(`Table scan: Chave não encontrada: "${chave}"`);
-                }
-            }
-            
-            mostrarPagina(numPagina) {
-                if (numPagina < 0 || numPagina >= this.paginas.length) {
-                    return;
-                }
-                
-                this.paginaAtualIdx = numPagina;
-                const pagina = this.paginas[numPagina];
-                
-                // Mostrar conteúdo da página
-                this.paginaConteudo.classList.remove('hidden');
-                this.paginaInfo.textContent = `Página ${numPagina} (${pagina.registros.length} registros)`;
-                this.paginaAtual.textContent = `Página ${numPagina + 1} de ${this.paginas.length}`;
-                
-                // Verificar navegação
-                this.paginaAnteriorBtn.disabled = numPagina <= 0;
-                this.proximaPaginaBtn.disabled = numPagina >= this.paginas.length - 1;
-                
-                // Mostrar dados da página
-                this.paginaDados.innerHTML = '';
-                const table = document.createElement('table');
-                table.className = 'tabla-resultado';
-                
-                // Cabeçalho da tabela
-                const thead = document.createElement('thead');
-                const headerRow = document.createElement('tr');
-                headerRow.innerHTML = `
-                    <th>Posição</th>
-                    <th>Registro</th>
-                `;
-                thead.appendChild(headerRow);
-                table.appendChild(thead);
-                
-                // Corpo da tabela
-                const tbody = document.createElement('tbody');
-                pagina.registros.forEach((registro, idx) => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${idx}</td>
-                        <td>${registro}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-                
-                table.appendChild(tbody);
-                this.paginaDados.appendChild(table);
-            }
-            
-            mostrarPaginaAnterior() {
-                if (this.paginaAtualIdx > 0) {
-                    this.mostrarPagina(this.paginaAtualIdx - 1);
-                }
-            }
-            
-            mostrarProximaPagina() {
-                if (this.paginaAtualIdx < this.paginas.length - 1) {
-                    this.mostrarPagina(this.paginaAtualIdx + 1);
-                }
-            }
-            
-            atualizarEstatisticas() {
-                if (!this.index) return;
-                
-                const NR = this.palavras.length;
-                const FR = this.index.fr;
-                const NB = this.index.num_buckets;
-                
-                this.numRegistros.textContent = NR;
-                this.frValor.textContent = FR;
-                this.numBuckets.textContent = NB;
-                this.overflowBuckets.textContent = this.index.contarBucketsComOverflow();
-                this.totalColisoes.textContent = this.index.colisoes;
-                this.paginasUtilizadas.textContent = this.paginas.length;
+            // Indexar cada palavra na página
+            for (let j = 0; j < registros.length; j++) {
+                const palavra = registros[j];
+                this.index.inserir(palavra, paginaNum, j);
             }
         }
-
-        // Inicializar a aplicação quando o DOM estiver carregado
-        document.addEventListener('DOMContentLoaded', () => {
-            const app = new Aplicacao();
+        
+        // Atualizar estatísticas
+        this.atualizarEstatisticas();
+        
+        // Habilitar busca
+        this.buscarBtn.disabled = false;
+        this.tableScanBtn.disabled = false;
+        
+        // Atualizar resultado
+        this.resultado.textContent = `Índice construído com sucesso! ${this.palavras.length} palavras indexadas em ${this.paginas.length} páginas.`;
+        
+        this.adicionarLog(`Índice construído: ${this.palavras.length} palavras indexadas em ${this.paginas.length} páginas`);
+    }
+    
+    buscar() {
+        const chave = this.chaveInput.value;
+        if (!chave) {
+            alert('Digite uma chave para buscar!');
+            return;
+        }
+        
+        this.adicionarLog(`Buscando por hash: "${chave}"`);
+        
+        const inicio = performance.now();
+        
+        // Adicionaremos um contador de acessos
+        let acessos = 1; // Começa com 1 para o acesso inicial ao bucket
+        
+        // Simulação do caminho da busca por hash (função hash + acessos a buckets)
+        const idx = this.index.funcao_hash(chave);
+        let bucket = this.index.buckets[idx];
+        
+        // Verifica no bucket principal
+        let encontrado = false;
+        let resultado = null;
+        for (const [k, p, pos] of bucket.registros) {
+            if (k === chave) {
+                encontrado = true;
+                resultado = { pagina: p, posicao: pos };
+                break;
+            }
+        }
+        
+        // Se não encontrou e existe overflow, busca nos overflows
+        let bucketAtual = bucket;
+        while (!encontrado && bucketAtual.OVERFLOW !== null) {
+            acessos++; // Incrementa o custo para cada acesso a um bucket de overflow
+            bucketAtual = bucketAtual.OVERFLOW;
+            
+            for (const [k, p, pos] of bucketAtual.registros) {
+                if (k === chave) {
+                    encontrado = true;
+                    resultado = { pagina: p, posicao: pos };
+                    break;
+                }
+            }
+        }
+        
+        const tempoBusca = performance.now() - inicio;
+        
+        this.registroDetalhes.innerHTML = '';
+        
+        if (encontrado) {
+            const { pagina, posicao } = resultado;
+            
+            this.resultado.innerHTML = `<strong>Encontrado via hash</strong> em ${tempoBusca.toFixed(3)}ms (Custo: ${acessos} acessos)`;
+            
+            // Mostrar registro encontrado
+            this.registroEncontrado.classList.remove('hidden');
+            
+            // Adicionar detalhes do registro
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${chave}</td>
+                <td>${pagina}</td>
+                <td>${posicao}</td>
+                <td>Sim</td>
+                <td>${acessos}</td>
+            `;
+            this.registroDetalhes.appendChild(tr);
+            
+            // Mostrar página
+            this.mostrarPagina(pagina);
+            
+            this.adicionarLog(`Registro encontrado: Página ${pagina}, Posição ${posicao}, Tempo: ${tempoBusca.toFixed(3)}ms, Custo: ${acessos} acessos`);
+        } else {
+            this.resultado.innerHTML = `<strong>Chave não encontrada</strong> (Tempo de busca: ${tempoBusca.toFixed(3)}ms, Custo: ${acessos} acessos)`;
+            this.registroEncontrado.classList.add('hidden');
+            this.paginaConteudo.classList.add('hidden');
+            
+            this.adicionarLog(`Chave não encontrada: "${chave}", Custo: ${acessos} acessos`);
+        }
+    }
+    
+    tableScan() {
+        const chave = this.chaveInput.value;
+        if (!chave) {
+            alert('Digite uma chave para buscar!');
+            return;
+        }
+        
+        this.adicionarLog(`Realizando table scan: "${chave}"`);
+        
+        const inicio = performance.now();
+        let encontrado = false;
+        let paginaEncontrada, posicaoEncontrada;
+        let acessos = 0;
+        
+        // Percorrer todas as páginas
+        for (const pagina of this.paginas) {
+            acessos++; // Incrementa o custo para cada página acessada
+            
+            // Verificar cada registro na página
+            for (let i = 0; i < pagina.registros.length; i++) {
+                if (pagina.registros[i] === chave) {
+                    encontrado = true;
+                    paginaEncontrada = pagina.numero;
+                    posicaoEncontrada = i;
+                    break;
+                }
+            }
+            
+            if (encontrado) break;
+        }
+        
+        const tempoScan = performance.now() - inicio;
+        
+        this.registroDetalhes.innerHTML = '';
+        
+        if (encontrado) {
+            this.resultado.innerHTML = `<strong>Encontrado via table scan</strong> em ${tempoScan.toFixed(3)}ms (Custo: ${acessos} páginas acessadas)`;
+            
+            // Mostrar registro encontrado
+            this.registroEncontrado.classList.remove('hidden');
+            
+            // Adicionar detalhes do registro
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${chave}</td>
+                <td>${paginaEncontrada}</td>
+                <td>${posicaoEncontrada}</td>
+                <td>Não</td>
+                <td>${acessos}</td>
+            `;
+            this.registroDetalhes.appendChild(tr);
+            
+            // Mostrar página
+            this.mostrarPagina(paginaEncontrada);
+            
+            this.adicionarLog(`Registro encontrado por table scan: Página ${paginaEncontrada}, Posição ${posicaoEncontrada}, Tempo: ${tempoScan.toFixed(3)}ms, Custo: ${acessos} páginas`);
+        } else {
+            this.resultado.innerHTML = `<strong>Chave não encontrada (Table Scan)</strong> (Tempo: ${tempoScan.toFixed(3)}ms, Custo: ${acessos} páginas)`;
+            this.registroEncontrado.classList.add('hidden');
+            this.paginaConteudo.classList.add('hidden');
+            
+            this.adicionarLog(`Table scan: Chave não encontrada: "${chave}", Custo: ${acessos} páginas`);
+        }
+    }
+    
+    mostrarPagina(numPagina) {
+        if (numPagina < 0 || numPagina >= this.paginas.length) {
+            return;
+        }
+        
+        this.paginaAtualIdx = numPagina;
+        const pagina = this.paginas[numPagina];
+        
+        // Mostrar conteúdo da página
+        this.paginaConteudo.classList.remove('hidden');
+        this.paginaInfo.textContent = `Página ${numPagina} (${pagina.registros.length} registros)`;
+        this.paginaAtual.textContent = `Página ${numPagina + 1} de ${this.paginas.length}`;
+        
+        // Verificar navegação
+        this.paginaAnteriorBtn.disabled = numPagina <= 0;
+        this.proximaPaginaBtn.disabled = numPagina >= this.paginas.length - 1;
+        
+        // Mostrar dados da página
+        this.paginaDados.innerHTML = '';
+        const table = document.createElement('table');
+        table.className = 'tabla-resultado';
+        
+        // Cabeçalho da tabela
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headerRow.innerHTML = `
+            <th>Posição</th>
+            <th>Registro</th>
+        `;
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Corpo da tabela
+        const tbody = document.createElement('tbody');
+        pagina.registros.forEach((registro, idx) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${idx}</td>
+                <td>${registro}</td>
+            `;
+            tbody.appendChild(tr);
         });
+        
+        table.appendChild(tbody);
+        this.paginaDados.appendChild(table);
+    }
+    
+    mostrarPaginaAnterior() {
+        if (this.paginaAtualIdx > 0) {
+            this.mostrarPagina(this.paginaAtualIdx - 1);
+        }
+    }
+    
+    mostrarProximaPagina() {
+        if (this.paginaAtualIdx < this.paginas.length - 1) {
+            this.mostrarPagina(this.paginaAtualIdx + 1);
+        }
+    }
+    
+    atualizarEstatisticas() {
+        if (!this.index) return;
+        
+        const NR = this.palavras.length;
+        const FR = this.index.fr;
+        const NB = this.index.num_buckets;
+        const overflowCount = this.index.contarBucketsComOverflow();
+        
+       
+        this.numRegistros.textContent = NR;
+        this.frValor.textContent = FR;
+        this.numBuckets.textContent = NB;
+        this.overflowBuckets.textContent = overflowCount;
+        this.totalColisoes.textContent = this.index.colisoes;
+        this.paginasUtilizadas.textContent = this.paginas.length;
+      
+        // Taxa de colisões: (Número total de colisões / Número total de registros) * 100
+        const taxaColisoes = (this.index.colisoes / NR) * 100;
+        this.taxaColisoes.textContent = `${taxaColisoes.toFixed(2)}%`;
+        
+        // Taxa de overflows: (Número de buckets com overflow / Número total de buckets) * 100
+        const taxaOverflows = (overflowCount / NR) * 100;
+        this.taxaOverflows.textContent = `${taxaOverflows.toFixed(2)}%`;
+        
+        this.adicionarLog(`Estatísticas atualizadas: Taxa Colisões=${taxaColisoes.toFixed(2)}%, Taxa Overflows=${taxaOverflows.toFixed(2)}%`);
+    }
+}
+
+// Inicializar a aplicação quando o DOM estiver carregado
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new Aplicacao();
+});
     </script>
 </body>
 </html>
+
+
