@@ -378,7 +378,7 @@ class HashIndex {
         return Math.abs(hash % this.num_buckets);
     }
     
-    inserir(chave, pagina, posicao) {
+    inserir(chave, pagina, posicao) {     //MUITO FODAAAA!!!
         const idx = this.funcao_hash(chave);
         
         // Se o bucket principal estiver cheio
@@ -392,7 +392,7 @@ class HashIndex {
         }
         
         // Tenta inserir (vai criar bucket de overflow se necessário)
-        this.buckets[idx].inserir(chave, pagina, posicao);
+        this.buckets[idx].inserir(chave, pagina, posicao);       
     }
     
     buscar(chave) {
@@ -620,7 +620,6 @@ class Aplicacao {
         // Se não encontrou e existe overflow, busca nos overflows
         let bucketAtual = bucket;
         while (!encontrado && bucketAtual.OVERFLOW !== null) {
-            acessos++; // Incrementa o custo para cada acesso a um bucket de overflow
             bucketAtual = bucketAtual.OVERFLOW;
             
             for (const [k, p, pos] of bucketAtual.registros) {
@@ -813,7 +812,7 @@ class Aplicacao {
         this.taxaColisoes.textContent = `${taxaColisoes.toFixed(2)}%`;
         
         // Taxa de overflows: (Número de buckets com overflow / Número total de buckets) * 100
-        const taxaOverflows = (overflowCount / NR) * 100;
+        const taxaOverflows = (overflowCount / NB) * 100;
         this.taxaOverflows.textContent = `${taxaOverflows.toFixed(2)}%`;
         
         this.adicionarLog(`Estatísticas atualizadas: Taxa Colisões=${taxaColisoes.toFixed(2)}%, Taxa Overflows=${taxaOverflows.toFixed(2)}%`);
